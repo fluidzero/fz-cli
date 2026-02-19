@@ -35,7 +35,7 @@ def _extract_detail(response: httpx.Response) -> str | None:
         if isinstance(detail, dict):
             return detail.get("message", str(detail))
         return None
-    except Exception:
+    except ValueError:
         return None
 
 

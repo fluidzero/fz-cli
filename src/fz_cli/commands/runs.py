@@ -188,7 +188,11 @@ def runs_create(
         click.echo(f"Run created: {run_id}", err=True)
 
     if wait:
-        run = _wait_for_run(ctx, run_id, timeout=timeout)
+        try:
+            run = _wait_for_run(ctx, run_id, timeout=timeout)
+        except KeyboardInterrupt:
+            click.echo(f"\nInterrupted. Run {run_id} continues on server.", err=True)
+            return
 
     format_output(run, fmt=fmt, quiet=quiet)
 
@@ -301,26 +305,30 @@ def runs_watch(ctx, run_id):
 
         return table
 
-    with Live(refresh_per_second=1) as live:
-        while True:
-            resp = fz.get(f"/api/runs/{run_id}")
-            run = resp.json()
-            status = run.get("status")
+    try:
+        with Live(refresh_per_second=1) as live:
+            while True:
+                resp = fz.get(f"/api/runs/{run_id}")
+                run = resp.json()
+                status = run.get("status")
 
-            # Fetch recent events
-            events_resp = fz.get(
-                f"/api/runs/{run_id}/status-events",
-                params={"limit": 5},
-            )
-            events_data = events_resp.json()
-            events = events_data.get("items", []) if isinstance(events_data, dict) else events_data
+                # Fetch recent events
+                events_resp = fz.get(
+                    f"/api/runs/{run_id}/status-events",
+                    params={"limit": 5},
+                )
+                events_data = events_resp.json()
+                events = events_data.get("items", []) if isinstance(events_data, dict) else events_data
 
-            live.update(_build_table(run, events))
+                live.update(_build_table(run, events))
 
-            if status in ("completed", "failed", "cancelled"):
-                break
+                if status in ("completed", "failed", "cancelled"):
+                    break
 
-            time.sleep(poll_interval)
+                time.sleep(poll_interval)
+    except KeyboardInterrupt:
+        click.echo(f"\nStopped watching. Run {run_id} continues on server.", err=True)
+        return
 
     # Print final status to stderr
     if status == "completed":

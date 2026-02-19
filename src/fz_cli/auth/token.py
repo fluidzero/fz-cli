@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import time
 from typing import Any
 
@@ -10,6 +11,16 @@ import httpx
 import jwt
 
 from .credentials import load_credentials, save_credentials
+
+_MAX_REFRESH_RETRIES = 3
+_TRANSIENT_STATUSES = {429, 502, 503, 504}
+
+
+def _retry_delay(attempt: int) -> float:
+    """Exponential backoff with jitter."""
+    base_delays = [1, 2, 4]
+    base = base_delays[attempt] if attempt < len(base_delays) else base_delays[-1]
+    return min(base + random.random(), 30.0)
 
 
 class TokenManager:
@@ -95,21 +106,30 @@ class TokenManager:
         if not self._refresh_token:
             return False
 
-        try:
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.post(
-                    f"{self.api_url}/oauth/token",
-                    data={
-                        "grant_type": "refresh_token",
-                        "refresh_token": self._refresh_token,
-                        "source": "device",
-                    },
-                )
-        except httpx.RequestError as exc:
-            click.echo(f"Warning: Token refresh failed (network): {exc}", err=True)
-            return False
+        resp = None
+        with httpx.Client(timeout=30.0) as client:
+            for attempt in range(_MAX_REFRESH_RETRIES):
+                try:
+                    resp = client.post(
+                        f"{self.api_url}/oauth/token",
+                        data={
+                            "grant_type": "refresh_token",
+                            "refresh_token": self._refresh_token,
+                            "source": "device",
+                        },
+                    )
+                except httpx.RequestError as exc:
+                    if attempt == _MAX_REFRESH_RETRIES - 1:
+                        click.echo(f"Warning: Token refresh failed (network): {exc}", err=True)
+                        return False
+                    time.sleep(_retry_delay(attempt))
+                    continue
 
-        if resp.status_code != 200:
+                if resp.status_code not in _TRANSIENT_STATUSES or attempt == _MAX_REFRESH_RETRIES - 1:
+                    break
+                time.sleep(_retry_delay(attempt))
+
+        if resp is None or resp.status_code != 200:
             click.echo(
                 "Warning: Token refresh failed. "
                 "Run `fz auth login` if requests fail.",
@@ -117,8 +137,18 @@ class TokenManager:
             )
             return False
 
-        body = resp.json()
-        self._access_token = body["access_token"]
+        try:
+            body = resp.json()
+        except ValueError:
+            click.echo("Warning: Token refresh returned invalid response.", err=True)
+            return False
+
+        access_token = body.get("access_token")
+        if not access_token:
+            click.echo("Warning: Token refresh response missing access_token.", err=True)
+            return False
+
+        self._access_token = access_token
         # WorkOS rotates the refresh token on each use
         self._refresh_token = body.get("refresh_token", self._refresh_token)
         # Derive expiry: prefer expires_in from response, else decode JWT exp

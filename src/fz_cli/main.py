@@ -46,7 +46,9 @@ def cli(ctx, api_url, project, output_format, quiet, verbose, no_color):
     ctx.obj["no_color"] = no_color
 
     # Lazy client — created on first use by commands that need it
-    ctx.obj["client"] = FZClient(api_url=resolved_api_url, verbose=verbose)
+    client = FZClient(api_url=resolved_api_url, verbose=verbose)
+    ctx.obj["client"] = client
+    ctx.call_on_close(client.close)
 
 
 # ── Register command groups ─────────────────────────────────────────────────

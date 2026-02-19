@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import random
 import sys
+import time
 from typing import Any
 
 import click
@@ -14,6 +16,16 @@ from .auth.m2m import exchange_client_credentials
 from .auth.token import TokenManager
 from .constants import EXIT_AUTH_FAILURE
 from .errors import handle_api_error, handle_network_error
+
+_TRANSIENT_STATUSES = {429, 502, 503, 504}
+_MAX_TRANSIENT_RETRIES = 3
+
+
+def _transient_delay(attempt: int) -> float:
+    """Exponential backoff with jitter for transient failures."""
+    base_delays = [1, 2, 4]
+    base = base_delays[attempt] if attempt < len(base_delays) else base_delays[-1] * (2 ** (attempt - len(base_delays) + 1))
+    return min(base + random.random(), 30.0)
 
 
 class FZClient:
@@ -96,7 +108,9 @@ class FZClient:
             try:
                 self._exchange_m2m()
                 return True
-            except Exception:
+            except (httpx.RequestError, click.ClickException) as exc:
+                if self.verbose:
+                    click.echo(f"  Auth re-exchange failed: {exc}", err=True)
                 return False
         return self._token_mgr.refresh()
 
@@ -109,28 +123,54 @@ class FZClient:
         data: Any = None,
         params: dict | None = None,
     ) -> httpx.Response:
-        """Make an authenticated API request with auto-retry on 401."""
+        """Make an authenticated API request with auto-retry on transient errors and 401."""
         self._log_request(method, f"{self.api_url}{path}")
 
-        try:
-            resp = self._client.request(
-                method,
-                path,
-                headers=self._headers(),
-                json=json,
-                data=data,
-                params=params,
-            )
-        except httpx.RequestError as exc:
-            handle_network_error(exc)
-            return None  # unreachable
+        resp = None
+        for attempt in range(_MAX_TRANSIENT_RETRIES):
+            try:
+                resp = self._client.request(
+                    method,
+                    path,
+                    headers=self._headers(),
+                    json=json,
+                    data=data,
+                    params=params,
+                )
+            except httpx.RequestError as exc:
+                if attempt == _MAX_TRANSIENT_RETRIES - 1:
+                    handle_network_error(exc)
+                if self.verbose:
+                    click.echo(
+                        f"  Retry {attempt + 1}/{_MAX_TRANSIENT_RETRIES} ({type(exc).__name__})",
+                        err=True,
+                    )
+                time.sleep(_transient_delay(attempt))
+                continue
+
+            # Transient server errors: retry with backoff
+            if resp.status_code in _TRANSIENT_STATUSES and attempt < _MAX_TRANSIENT_RETRIES - 1:
+                delay = _transient_delay(attempt)
+                retry_after = resp.headers.get("retry-after")
+                if retry_after:
+                    try:
+                        delay = max(delay, float(retry_after))
+                    except ValueError:
+                        pass
+                if self.verbose:
+                    click.echo(
+                        f"  Retry {attempt + 1}/{_MAX_TRANSIENT_RETRIES} (HTTP {resp.status_code})",
+                        err=True,
+                    )
+                time.sleep(delay)
+                continue
+
+            break
 
         # Retry once on 401 — refresh or re-exchange, then replay
         if resp.status_code == 401:
             www_auth = resp.headers.get("www-authenticate", "").lower()
-            if "revoked" in www_auth:
-                pass  # fall through to handle_api_error
-            elif self._retry_auth():
+            if "revoked" not in www_auth and self._retry_auth():
                 try:
                     resp = self._client.request(
                         method,

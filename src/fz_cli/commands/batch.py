@@ -194,7 +194,11 @@ def run_cmd(
 
     # ── Step 4: Optionally wait and show results ────────────────────────
     if wait:
-        run = _wait_for_run(ctx, fz, run_id, timeout=timeout)
+        try:
+            run = _wait_for_run(ctx, fz, run_id, timeout=timeout)
+        except KeyboardInterrupt:
+            click.echo(f"\nInterrupted. Run {run_id} continues on server.", err=True)
+            return
 
         # Fetch and display results
         results = _fetch_all_results(fz, run_id)
@@ -280,9 +284,9 @@ def batch_cmd(
         )
 
     # ── Process each batch ──────────────────────────────────────────────
-    # When streaming to a file, avoid holding all results in memory simultaneously.
     all_results: list[dict] = []  # only populated when no output_file
     total_result_count = 0
+    completed_batches = 0
     output_handle = None
 
     try:
@@ -321,6 +325,7 @@ def batch_cmd(
             # Collect results
             results = _fetch_all_results(fz, run_id)
             total_result_count += len(results)
+            completed_batches += 1
 
             if not quiet:
                 click.echo(
@@ -336,15 +341,20 @@ def batch_cmd(
             else:
                 all_results.extend(results)
 
+    except KeyboardInterrupt:
+        if not quiet:
+            click.echo("\nBatch processing interrupted by user.", err=True)
     finally:
         if output_handle:
             output_handle.close()
 
     # ── Summary ─────────────────────────────────────────────────────────
     if not quiet:
+        status_word = "complete" if completed_batches == len(batches) else "stopped"
         click.echo(
-            f"\nBatch processing complete: {len(all_files)} file(s), "
-            f"{len(batches)} batch(es), {total_result_count} total result(s).",
+            f"\nBatch processing {status_word}: "
+            f"{completed_batches}/{len(batches)} batch(es), "
+            f"{total_result_count} total result(s).",
             err=True,
         )
         if output_file:
