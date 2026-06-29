@@ -85,7 +85,7 @@ def _upload_part(
                 f.seek(offset)
                 chunk = f.read(size)
 
-            headers = {"Content-MD5": _content_md5(chunk)}
+            headers = {}
             if is_single_part:
                 headers["Content-Type"] = mime_type
 
