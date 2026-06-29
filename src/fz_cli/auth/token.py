@@ -82,13 +82,21 @@ class TokenManager:
         return self._expires_at - 60 < int(time.time())
 
     def get_access_token(self) -> str | None:
-        """Return a valid access token, refreshing transparently if needed."""
+        """Return a valid access token, refreshing transparently if needed.
+
+        Returns None — never a stale token — when the token is expired and
+        cannot be refreshed (no refresh token, or refresh failed). This lets
+        callers detect "re-auth required" instead of sending a dead JWT that
+        401s opaquely downstream.
+        """
         if not self._access_token:
             return None
         if self.is_expired():
-            if self._refresh_token:
-                self.refresh()
-            else:
+            if not self._refresh_token:
+                return None
+            if not self.refresh():
+                return None
+            if self.is_expired():
                 return None
         return self._access_token
 
