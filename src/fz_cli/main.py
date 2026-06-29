@@ -59,6 +59,7 @@ from .commands.documents import documents_group
 from .commands.schemas import schemas_group
 from .commands.prompts import prompts_group
 from .commands.runs import runs_group
+from .commands.extractions import extractions_group
 from .commands.search import search_cmd
 from .commands.webhooks import webhooks_group
 from .commands.batch import run_cmd, batch_cmd
@@ -70,6 +71,7 @@ cli.add_command(documents_group)
 cli.add_command(schemas_group)
 cli.add_command(prompts_group)
 cli.add_command(runs_group)
+cli.add_command(extractions_group)
 cli.add_command(search_cmd)
 cli.add_command(webhooks_group)
 cli.add_command(run_cmd)

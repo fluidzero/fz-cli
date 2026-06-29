@@ -63,8 +63,15 @@ def projects_list(ctx):
 @projects_group.command("create")
 @click.argument("name")
 @click.option("--description", "-d", default=None, help="Project description.")
+@click.option(
+    "--workspace",
+    "-w",
+    envvar="FZ_WORKSPACE_ID",
+    default=None,
+    help="Workspace ID to create the project in (or set FZ_WORKSPACE_ID). Required by the API.",
+)
 @click.pass_context
-def projects_create(ctx, name: str, description: str | None):
+def projects_create(ctx, name: str, description: str | None, workspace: str | None):
     """Create a new project."""
     client = ctx.obj["client"]
     fmt = ctx.obj["output_format"]
@@ -73,6 +80,8 @@ def projects_create(ctx, name: str, description: str | None):
     payload: dict = {"name": name}
     if description is not None:
         payload["description"] = description
+    if workspace:
+        payload["workspaceId"] = workspace
 
     resp = client.post("/api/projects", json=payload)
     data = resp.json()
