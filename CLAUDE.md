@@ -50,6 +50,13 @@ fz projects list
 fz documents upload -p <project-id> *.pdf --wait
 fz runs create -p <project-id> --schema <schema-id> --wait
 fz run -p <project-id> --schema <schema-id> --upload *.pdf --wait  # composite
+
+# v2 eager atlas_live extraction (headless/scriptable — dispatches immediately)
+# NOTE: v1 `runs create --pipeline atlas_live` is ATTACH-ONLY (browser UI); run headlessly it is
+# never dispatched and gets reaped as an orphan pending run. Use `fz extractions` for headless atlas_live.
+fz extractions create -p <project-id> --schema-version <sv-id> [--prompt-version <pv-id>] --external-id <id>
+fz extractions get|result|cancel <extraction-id>
+
 fz search "quarterly revenue" -p <project-id>
 
 # Global flags come BEFORE subcommand (Click convention)
@@ -83,7 +90,8 @@ src/fz_cli/
     ├── documents.py     # fz documents upload|list|get|delete|download
     ├── schemas.py       # fz schemas CRUD + fz schemas versions create|list|get|diff
     ├── prompts.py       # fz prompts CRUD + fz prompts versions create|list|get (--text-only)
-    ├── runs.py          # fz runs create|list|get|watch|cancel|results|documents|events
+    ├── runs.py          # fz runs create|list|get|watch|cancel|results|documents|events (v1)
+    ├── extractions.py   # fz extractions create|get|result|cancel — v2 eager atlas_live (headless/scriptable)
     ├── search.py        # fz search <query> (global or project-scoped)
     ├── webhooks.py      # fz webhooks create|list|get|update|delete|test|deliveries
     ├── api_keys.py      # fz api-keys create|list|get|revoke
@@ -131,6 +139,8 @@ Set `FZ_CLIENT_ID` + `FZ_CLIENT_SECRET` env vars. On first API call:
 3. Token stored in memory only (not persisted to disk)
 
 **Token re-exchange** (transparent): When M2M token expires, FZClient automatically re-exchanges `client_id`/`client_secret` for a fresh token. No refresh token involved — it's a full re-exchange. On 401, also retries with re-exchange.
+
+**M2M scope limit (gotcha):** M2M tokens carry no `sid` (session) claim and a CI/CD role, so **control-plane ops fail under M2M** — `webhooks` and `api-keys` (even `list`) return `Invalid token: missing 'sid' claim`, `webhooks create` returns `requires 'webhooks:write'`, and resource `delete` (documents/schemas/prompts/projects) returns `Permission denied`. These need an interactive **user token** from `fz auth login` (device flow → `sid` + owner role). The device `sid` token is short-lived (~5 min) and **drops `sid` on refresh**, so re-login immediately before sid-gated work. The user identity can also be a different org than the M2M client — it may be able to operate on existing projects in a workspace yet not *create* one there (cross-org → `Access denied to this workspace`).
 
 #### 3. Swagger UI / Frontend (AuthKit OAuth2)
 
