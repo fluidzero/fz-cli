@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from typing import Any
 
 import click
@@ -180,6 +179,56 @@ def schemas_delete(ctx: click.Context, schema_id: str, confirm: bool) -> None:
 
     if not ctx.obj["quiet"]:
         click.echo(f"Schema '{schema_id}' deleted.", err=True)
+
+
+# ---------------------------------------------------------------------------
+# schemas describe (LLM: natural language -> JSON Schema, preview only)
+# ---------------------------------------------------------------------------
+@schemas_group.command("describe")
+@click.option("-p", "--project", default=None, help="Project ID (or set FZ_PROJECT_ID).")
+@click.option("--text", "instruction", required=True, help="Natural-language description of the schema.")
+@click.pass_context
+def schemas_describe(ctx: click.Context, project: str | None, instruction: str) -> None:
+    """Generate a JSON Schema from a natural-language description (preview only).
+
+    The result is NOT persisted — pipe it to a file and commit it with
+    `fz schemas create --file`.
+    """
+    pid = resolve_project_id(ctx, project)
+    client = ctx.obj["client"]
+
+    resp = client.post(
+        f"/api/projects/{pid}/schemas/describe",
+        json={"newInstruction": instruction},
+    )
+    format_output(resp.json(), fmt=ctx.obj["output_format"], quiet=ctx.obj["quiet"])
+
+
+# ---------------------------------------------------------------------------
+# schemas infer (LLM: XLSX document -> persisted schema)
+# ---------------------------------------------------------------------------
+@schemas_group.command("infer")
+@click.option("--document", "document_id", required=True, help="XLSX document ID to infer from.")
+@click.option("--sheet", "sheet_name", default=None, help="Restrict inference to one worksheet.")
+@click.pass_context
+def schemas_infer(ctx: click.Context, document_id: str, sheet_name: str | None) -> None:
+    """Infer and persist a JSON Schema from an XLSX document."""
+    client = ctx.obj["client"]
+
+    body: dict = {}
+    if sheet_name:
+        body["sheetName"] = sheet_name
+
+    resp = client.post(
+        f"/api/documents/{document_id}/infer-schema",
+        json=body or None,
+    )
+    data = resp.json()
+
+    if not ctx.obj["quiet"]:
+        sd = data.get("schema", data.get("schemaDef", {})) or {}
+        click.echo(f"Schema inferred: {sd.get('id', '')}".rstrip(), err=True)
+    format_output(data, fmt=ctx.obj["output_format"], quiet=ctx.obj["quiet"])
 
 
 # ---------------------------------------------------------------------------

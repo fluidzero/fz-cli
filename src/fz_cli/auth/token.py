@@ -59,21 +59,28 @@ class TokenManager:
         refresh_token: str | None,
         expires_in: int,
         client_id: str | None = None,
+        persist: bool = True,
     ) -> None:
-        """Set tokens after a fresh login."""
+        """Set tokens after a fresh login.
+
+        ``persist=False`` keeps the tokens in memory only — required for M2M
+        exchanges, which must never overwrite the browser-flow credentials
+        file (doing so would destroy the user's refresh token).
+        """
         self._access_token = access_token
         self._refresh_token = refresh_token
         self._expires_at = int(time.time()) + expires_in
         if client_id:
             self._client_id = client_id
 
-        save_credentials(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_at=self._expires_at,
-            api_url=self.api_url,
-            client_id=self._client_id,
-        )
+        if persist:
+            save_credentials(
+                access_token=access_token,
+                refresh_token=refresh_token,
+                expires_at=self._expires_at,
+                api_url=self.api_url,
+                client_id=self._client_id,
+            )
 
     # ── Expiry / Access ─────────────────────────────────────────────────
 

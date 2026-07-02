@@ -9,6 +9,8 @@ from typing import Any
 import click
 import httpx
 
+from ..constants import EXIT_AUTH_FAILURE
+
 _MAX_RETRIES = 3
 _TRANSIENT_STATUSES = {429, 502, 503, 504}
 
@@ -60,10 +62,14 @@ def exchange_client_credentials(
             msg = err.get("error_description", err.get("error", resp.text))
         except ValueError:
             msg = resp.text if resp else "no response"
-        raise click.ClickException(f"M2M authentication failed: {msg}")
+        exc = click.ClickException(f"M2M authentication failed: {msg}")
+        exc.exit_code = EXIT_AUTH_FAILURE
+        raise exc
 
     body = resp.json()
     if "access_token" not in body:
-        raise click.ClickException("M2M authentication failed: response missing access_token")
+        exc = click.ClickException("M2M authentication failed: response missing access_token")
+        exc.exit_code = EXIT_AUTH_FAILURE
+        raise exc
 
     return body

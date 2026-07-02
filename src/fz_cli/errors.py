@@ -34,6 +34,17 @@ def _extract_detail(response: httpx.Response) -> str | None:
             return detail
         if isinstance(detail, dict):
             return detail.get("message", str(detail))
+        if isinstance(detail, list):
+            # FastAPI validation errors: [{loc: [...], msg: "..."}, ...]
+            parts = []
+            for err in detail:
+                if isinstance(err, dict):
+                    loc = " -> ".join(str(p) for p in err.get("loc", []))
+                    msg = err.get("msg", "")
+                    parts.append(f"{loc}: {msg}" if loc else msg)
+                else:
+                    parts.append(str(err))
+            return "; ".join(p for p in parts if p) or None
         return None
     except ValueError:
         return None

@@ -7,7 +7,6 @@ import hashlib
 import os
 import random
 import signal
-import sys
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
@@ -19,7 +18,7 @@ import httpx
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TransferSpeedColumn
 
 from .client import FZClient
-from .constants import UPLOAD_CONCURRENCY, UPLOAD_DIRECT_THRESHOLD, UPLOAD_RETRY_ATTEMPTS
+from .constants import UPLOAD_CONCURRENCY, UPLOAD_RETRY_ATTEMPTS
 
 
 class _UploadAborted(Exception):

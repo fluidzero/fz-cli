@@ -72,11 +72,55 @@ def extractions_group():
     pass
 
 
+def warn_if_result_empty(result: dict) -> None:
+    """Warn when a 'completed' v2 extraction produced no actual values.
+
+    A degraded pipeline can complete with error=None while extracting nothing
+    (metadata.fields_extracted == 0, all-null result values). Surface that
+    loudly instead of letting it read as success.
+    """
+    meta = result.get("metadata") or {}
+    extracted = meta.get("fields_extracted")
+    values = result.get("result") or {}
+    all_null = isinstance(values, dict) and values and all(
+        v in (None, "", [], {}) for v in values.values()
+    )
+    if extracted == 0 or (extracted is None and all_null):
+        click.echo(
+            "Warning: extraction completed but every field came back EMPTY. "
+            "This usually means the pipeline had a bad run, not that your "
+            "documents lack the data. Retry the same command — or check "
+            "`fz documents list` shows your documents as 'ready'.",
+            err=True,
+        )
+
+
+def resolve_latest_schema_version(fz, schema_id: str) -> str:
+    """Resolve a schema DEFINITION id to its latest schema-version id.
+
+    Spares users the schema-id -> versions-list -> version-id relay: pass
+    --schema <definition-id> and the newest version is used automatically.
+    """
+    schema = fz.get(f"/api/schemas/{schema_id}").json()
+    latest = schema.get("latestVersionNumber")
+    if not latest:
+        click.echo(
+            f"Error: schema {schema_id} has no versions yet. "
+            "Create one with `fz schemas versions create`.",
+            err=True,
+        )
+        sys.exit(EXIT_GENERAL_ERROR)
+    version = fz.get(f"/api/schemas/{schema_id}/versions/{latest}").json()
+    return version["id"]
+
+
 @extractions_group.command("create")
 @click.option("-p", "--project", "project_flag", default=None, help="Project ID.")
+@click.option("--schema", "schema_id", default=None,
+              help="Schema ID — the latest version is resolved automatically.")
 @click.option("--schema-version", "schema_version_id", default=None,
-              help="Schema version ID (use this OR --schema/--schema-file).")
-@click.option("--schema", "schema_inline", default=None, help="Inline JSON schema string.")
+              help="Pin an exact schema version ID.")
+@click.option("--schema-json", "schema_inline", default=None, help="Inline JSON schema string.")
 @click.option("--schema-file", "schema_file", type=click.Path(exists=True), default=None,
               help="Path to a JSON file containing the inline schema.")
 @click.option("--prompt-version", "prompt_version_id", default=None, help="Prompt version ID.")
@@ -86,22 +130,23 @@ def extractions_group():
 @click.option("--timeout", type=int, default=None, help="Timeout in seconds when waiting.")
 @click.pass_context
 def extractions_create(
-    ctx, project_flag, schema_version_id, schema_inline, schema_file,
+    ctx, project_flag, schema_id, schema_version_id, schema_inline, schema_file,
     prompt_version_id, webhook_id, external_id, wait, timeout,
 ):
-    """Create a v2 extraction (exactly one of --schema-version / --schema / --schema-file)."""
+    """Create a v2 extraction (one of --schema / --schema-version / --schema-json / --schema-file)."""
     fz = ctx.obj["client"]
     fmt = ctx.obj["output_format"]
     quiet = ctx.obj["quiet"]
     pid = _resolve_project_id(ctx, project_flag)
 
-    # Exactly one schema source across all three inputs.
+    # Exactly one schema source across all four inputs.
     n_schema = sum(
-        x is not None for x in (schema_version_id, schema_inline, schema_file)
+        x is not None for x in (schema_id, schema_version_id, schema_inline, schema_file)
     )
     if n_schema != 1:
         click.echo(
-            "Error: provide exactly one of --schema-version, --schema, or --schema-file.",
+            "Error: provide exactly one of --schema, --schema-version, "
+            "--schema-json, or --schema-file.",
             err=True,
         )
         sys.exit(EXIT_GENERAL_ERROR)
@@ -114,8 +159,11 @@ def extractions_create(
         try:
             inline = json_mod.loads(schema_inline)
         except json_mod.JSONDecodeError as exc:
-            click.echo(f"Error: Invalid JSON for --schema: {exc}", err=True)
+            click.echo(f"Error: Invalid JSON for --schema-json: {exc}", err=True)
             sys.exit(EXIT_GENERAL_ERROR)
+
+    if schema_id is not None:
+        schema_version_id = resolve_latest_schema_version(fz, schema_id)
 
     payload: dict = {}
     if schema_version_id is not None:
@@ -137,6 +185,7 @@ def extractions_create(
     if wait:
         _wait_for_extraction(ctx, extraction_id, timeout)
         result = fz.get(f"/api/v2/extractions/{extraction_id}/result").json()
+        warn_if_result_empty(result)
         format_output(result, fmt=fmt, quiet=quiet)
         return
 
