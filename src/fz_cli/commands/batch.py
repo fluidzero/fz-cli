@@ -80,6 +80,44 @@ def _create_run(fz, project_id: str, payload: dict) -> dict:
     return resp.json()
 
 
+def _results_look_empty(results: list[dict]) -> bool:
+    """True when a 'completed' run produced no actual extracted values.
+
+    Detects the degraded case where the pipeline reports success but every
+    field came back empty (fields_extracted == 0 / no non-null data values).
+    """
+    if not results:
+        return True
+    for r in results:
+        data = r.get("data") or {}
+        meta = r.get("resultMetadata") or r.get("result_metadata") or {}
+        extracted = meta.get("fields_extracted", data.get("fields_extracted"))
+        if extracted:
+            return False
+        if extracted == 0:
+            # Pipeline explicitly reported zero fields — empty regardless of
+            # the per-field scaffolding dicts (they exist even when hollow).
+            continue
+        values = data.get("fields") or data
+        if isinstance(values, dict) and any(
+            v not in (None, "", [], {}) for v in values.values()
+        ):
+            return False
+    return True
+
+
+def _warn_if_empty(results: list[dict]) -> None:
+    if _results_look_empty(results):
+        click.echo(
+            "Warning: run completed but every field came back EMPTY "
+            "(0 fields extracted). This usually means the pipeline is "
+            "degraded, not that the documents contain no data. "
+            "Try the v2 extraction path instead: "
+            "`fz extractions create --schema-version <id> --wait`.",
+            err=True,
+        )
+
+
 def _fetch_all_results(fz, run_id: str) -> list[dict]:
     """Fetch all results for a run, paginating through all pages."""
     results: list[dict] = []
@@ -206,6 +244,7 @@ def run_cmd(
 
         if not quiet:
             click.echo(f"Run completed with {result_count} result(s).", err=True)
+        _warn_if_empty(results)
 
         format_output(
             {"items": results, "total": result_count},
@@ -332,6 +371,7 @@ def batch_cmd(
                     f"Batch {batch_idx} complete: {len(results)} result(s).",
                     err=True,
                 )
+            _warn_if_empty(results)
 
             if output_handle:
                 # Stream to file immediately — no need to keep in memory
