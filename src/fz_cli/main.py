@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import sys
 
 import click
 
 from . import __version__
 from .client import FZClient
-from .config import FZConfig, load_config
+from .config import load_config
 
 
 @click.group()
@@ -64,6 +63,8 @@ from .commands.search import search_cmd
 from .commands.webhooks import webhooks_group
 from .commands.batch import run_cmd, batch_cmd
 from .commands.api_keys import api_keys_group
+from .commands.workspaces import workspaces_group
+from .commands.uploads import uploads_group
 
 cli.add_command(auth_group)
 cli.add_command(projects_group)
@@ -77,6 +78,8 @@ cli.add_command(webhooks_group)
 cli.add_command(run_cmd)
 cli.add_command(batch_cmd)
 cli.add_command(api_keys_group)
+cli.add_command(workspaces_group)
+cli.add_command(uploads_group)
 
 
 def main():

@@ -163,12 +163,95 @@ def documents_delete(ctx, document_id: str, confirm: bool):
 @documents_group.command("download")
 @click.argument("document_id")
 @click.option("-o", "--output-dir", default=".", help="Directory to save the downloaded file.")
+@click.option("--url-only", is_flag=True, help="Print the presigned URL instead of downloading.")
 @click.pass_context
-def documents_download(ctx, document_id: str, output_dir: str):
-    """Download a document by ID."""
-    click.echo(
-        "Error: Download via presigned URL endpoint is not yet available. "
-        "Please use the web UI to download documents.",
-        err=True,
+def documents_download(ctx, document_id: str, output_dir: str, url_only: bool):
+    """Download a document by ID (via a presigned URL)."""
+    client = ctx.obj["client"]
+    quiet = ctx.obj["quiet"]
+
+    # File name from document metadata; presigned URL from the preview endpoint.
+    doc = client.get(f"/api/documents/{document_id}").json()
+    file_name = doc.get("fileName") or f"{document_id}.bin"
+
+    url = client.get(f"/api/documents/{document_id}/preview").json().get("url")
+    if not url:
+        click.echo("Error: API did not return a download URL.", err=True)
+        sys.exit(EXIT_GENERAL_ERROR)
+
+    if url_only:
+        click.echo(url)
+        return
+
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / file_name
+
+    raw = client.raw_client()  # shared client — do not close
+    with raw.stream("GET", url) as resp:
+        if resp.status_code >= 400:
+            click.echo(f"Error: download failed with HTTP {resp.status_code}", err=True)
+            sys.exit(EXIT_GENERAL_ERROR)
+        with open(dest, "wb") as fh:
+            for chunk in resp.iter_bytes():
+                fh.write(chunk)
+
+    if not quiet:
+        click.echo(f"Downloaded: {dest}", err=True)
+    # Print the saved path to stdout for scripting.
+    click.echo(str(dest))
+
+
+@documents_group.command("replace")
+@click.argument("document_id")
+@click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.pass_context
+def documents_replace(ctx, document_id: str, file: Path):
+    """Upload FILE as a new version of an existing document."""
+    client = ctx.obj["client"]
+    fmt = ctx.obj["output_format"]
+    quiet = ctx.obj["quiet"]
+
+    import mimetypes
+
+    mime = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
+    # Bytes (not a handle) so the 401-replay path can resend the body.
+    content = file.read_bytes()
+    resp = client.post(
+        f"/api/documents/{document_id}/versions",
+        files={"file": (file.name, content, mime)},
     )
-    sys.exit(EXIT_GENERAL_ERROR)
+    data = resp.json()
+
+    if not quiet:
+        click.echo(f"New version created for document {document_id}", err=True)
+    format_output(data, fmt=fmt, quiet=quiet)
+
+
+@documents_group.command("sheets")
+@click.argument("document_id")
+@click.pass_context
+def documents_sheets(ctx, document_id: str):
+    """List worksheet names of an xlsx document."""
+    client = ctx.obj["client"]
+    resp = client.get(f"/api/documents/{document_id}/sheets")
+    format_output(resp.json(), fmt=ctx.obj["output_format"], quiet=ctx.obj["quiet"])
+
+
+@documents_group.command("status")
+@click.option("-p", "--project", "project_id", default=None, help="Project ID.")
+@click.option("--document", "document_id", default=None, help="Check a single document.")
+@click.pass_context
+def documents_status(ctx, project_id: str | None, document_id: str | None):
+    """Show processing status for a document or all documents in a project."""
+    client = ctx.obj["client"]
+    fmt = ctx.obj["output_format"]
+    quiet = ctx.obj["quiet"]
+
+    if document_id:
+        resp = client.get(f"/api/documents/{document_id}/status")
+    else:
+        pid = resolve_project_id(ctx, project_id)
+        resp = client.get(f"/api/projects/{pid}/documents/status")
+
+    format_output(resp.json(), fmt=fmt, quiet=quiet)

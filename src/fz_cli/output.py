@@ -5,8 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
-import sys
-from typing import Any, Sequence
+from typing import Any
 
 import click
 from tabulate import tabulate

@@ -303,12 +303,18 @@ def webhooks_test(ctx, webhook_id):
 @click.option("--event-type", default=None, help="Filter by event type.")
 @click.option("--limit", type=int, default=None, help="Max deliveries to return.")
 @click.option("--offset", type=int, default=None, help="Offset for pagination.")
+@click.option("--delivery", "delivery_id", default=None, help="Show a single delivery by ID (full detail).")
 @click.pass_context
-def webhooks_deliveries(ctx, webhook_id, success_filter, event_type, limit, offset):
-    """List delivery attempts for a webhook."""
+def webhooks_deliveries(ctx, webhook_id, success_filter, event_type, limit, offset, delivery_id):
+    """List delivery attempts for a webhook (or one with --delivery)."""
     fz = ctx.obj["client"]
     fmt = ctx.obj["output_format"]
     quiet = ctx.obj["quiet"]
+
+    if delivery_id:
+        resp = fz.get(f"/api/webhooks/{webhook_id}/deliveries/{delivery_id}")
+        format_output(resp.json(), fmt=fmt, quiet=quiet)
+        return
 
     params: dict = {}
     if success_filter is not None:

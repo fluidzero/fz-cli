@@ -5,11 +5,25 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fluidzero-cli"
 version = "0.2.0"
-description = "FluidZero platform CLI"
+description = "FluidZero platform CLI — document intelligence: uploads, schemas, prompts, runs, extractions, webhooks"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 authors = [{name = "Force Platforms Inc"}]
+keywords = ["fluidzero", "document-intelligence", "extraction", "cli", "pdf", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+]
 dependencies = [
     "click>=8.1",
     "httpx>=0.27",
@@ -17,6 +31,9 @@ dependencies = [
     "rich>=13.0",
     "PyJWT>=2.8",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-mock>=3.14"]
 
 [project.scripts]
 fz = "fz_cli.main:cli"
@@ -28,3 +45,7 @@ Issues = "https://github.com/fluidzero/fz-cli/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

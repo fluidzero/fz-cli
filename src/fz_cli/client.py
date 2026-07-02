@@ -11,7 +11,6 @@ from typing import Any
 import click
 import httpx
 
-from .auth.credentials import load_credentials
 from .auth.m2m import exchange_client_credentials
 from .auth.token import TokenManager
 from .constants import EXIT_AUTH_FAILURE
@@ -122,10 +121,12 @@ class FZClient:
         json: Any = None,
         data: Any = None,
         params: dict | None = None,
+        files: Any = None,
     ) -> httpx.Response:
         """Make an authenticated API request with auto-retry on transient errors and 401."""
         self._log_request(method, f"{self.api_url}{path}")
 
+        extra: dict[str, Any] = {"files": files} if files is not None else {}
         resp = None
         for attempt in range(_MAX_TRANSIENT_RETRIES):
             try:
@@ -136,6 +137,7 @@ class FZClient:
                     json=json,
                     data=data,
                     params=params,
+                    **extra,
                 )
             except httpx.RequestError as exc:
                 if attempt == _MAX_TRANSIENT_RETRIES - 1:
@@ -179,6 +181,7 @@ class FZClient:
                         json=json,
                         data=data,
                         params=params,
+                        **extra,
                     )
                 except httpx.RequestError as exc:
                     handle_network_error(exc)

@@ -92,11 +92,11 @@ def browser_login(
 
         open_url = verification_uri_complete or verification_uri
         if open_url:
-            click.echo(f"Opening browser to confirm...", err=True)
+            click.echo("Opening browser to confirm...", err=True)
             click.echo(f"If the browser doesn't open, visit:\n  {open_url}\n", err=True)
             webbrowser.open(open_url)
         else:
-            click.echo(f"Visit the URL shown above and enter the code.", err=True)
+            click.echo("Visit the URL shown above and enter the code.", err=True)
 
         # Step 3: Poll for tokens (reuses same client / connection pool)
         click.echo("Waiting for confirmation...", err=True)

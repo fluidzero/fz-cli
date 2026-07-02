@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import sys
 
 import click
 
-from ..constants import EXIT_GENERAL_ERROR
 from ..output import format_output
 
 
