@@ -9,8 +9,6 @@ without a re-login).
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import httpx
 
 from fz_cli.client import FZClient

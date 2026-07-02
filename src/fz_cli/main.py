@@ -65,6 +65,9 @@ from .commands.batch import run_cmd, batch_cmd
 from .commands.api_keys import api_keys_group
 from .commands.workspaces import workspaces_group
 from .commands.uploads import uploads_group
+from .commands.init import init_cmd
+from .commands.extract import extract_cmd
+from .commands.mcp import mcp_group
 
 cli.add_command(auth_group)
 cli.add_command(projects_group)
@@ -80,6 +83,9 @@ cli.add_command(batch_cmd)
 cli.add_command(api_keys_group)
 cli.add_command(workspaces_group)
 cli.add_command(uploads_group)
+cli.add_command(init_cmd)
+cli.add_command(extract_cmd)
+cli.add_command(mcp_group)
 
 
 def main():

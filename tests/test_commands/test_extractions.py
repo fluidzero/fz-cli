@@ -42,7 +42,7 @@ def test_extractions_create_with_schema_version():
 def test_extractions_create_with_inline_schema():
     result, cap = _run(
         ["-o", "json", "extractions", "create", "-p", "proj_1",
-         "--schema", '{"type":"object","properties":{}}']
+         "--schema-json", '{"type":"object","properties":{}}']
     )
     assert result.exit_code == 0, result.output
     assert cap["json"]["schema"] == {"type": "object", "properties": {}}
@@ -52,7 +52,7 @@ def test_extractions_create_with_inline_schema():
 def test_extractions_create_rejects_both_schema_forms():
     result, _ = _run(
         ["extractions", "create", "-p", "proj_1",
-         "--schema-version", "sv_1", "--schema", "{}"]
+         "--schema-version", "sv_1", "--schema-json", "{}"]
     )
     assert result.exit_code != 0
     assert "exactly one" in result.output.lower()
@@ -68,7 +68,25 @@ def test_extractions_create_rejects_both_inline_schema_forms(tmp_path):
     f = tmp_path / "s.json"
     f.write_text('{"type":"object","properties":{}}')
     result, _ = _run(
-        ["extractions", "create", "-p", "proj_1", "--schema", "{}", "--schema-file", str(f)]
+        ["extractions", "create", "-p", "proj_1", "--schema-json", "{}", "--schema-file", str(f)]
     )
     assert result.exit_code != 0
     assert "exactly one" in result.output.lower()
+
+
+def test_extractions_create_with_schema_definition_resolves_latest(invoke, api):
+    """--schema <definition-id> resolves the latest version automatically."""
+    api.add("GET", "/api/schemas/sd_1", 200, {"id": "sd_1", "latestVersionNumber": 3})
+    api.add("GET", "/api/schemas/sd_1/versions/3", 200, {"id": "sv_latest", "versionNumber": 3})
+    api.add("POST", "/api/v2/projects/proj_1/extractions", 202,
+            {"extractionId": "ext_1", "status": "pending"})
+    result = invoke(["-o", "json", "extractions", "create", "-p", "proj_1", "--schema", "sd_1"])
+    assert result.exit_code == 0, result.output
+    assert api.last.json["schemaVersionId"] == "sv_latest"
+
+
+def test_extractions_create_schema_with_no_versions_errors(invoke, api):
+    api.add("GET", "/api/schemas/sd_empty", 200, {"id": "sd_empty", "latestVersionNumber": 0})
+    result = invoke(["extractions", "create", "-p", "proj_1", "--schema", "sd_empty"])
+    assert result.exit_code == 1
+    assert "no versions" in result.output
