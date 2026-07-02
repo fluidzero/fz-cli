@@ -17,8 +17,8 @@ WEBHOOK_LIST_COLUMNS = [
     ("id", "ID"),
     ("name", "NAME"),
     ("url", "URL"),
-    ("eventTypes", "EVENTS"),
-    ("isActive", "ACTIVE"),
+    ("events", "EVENTS"),
+    ("status", "STATUS"),
     ("createdAt", "CREATED"),
 ]
 
@@ -26,8 +26,8 @@ DELIVERY_LIST_COLUMNS = [
     ("id", "ID"),
     ("eventType", "EVENT"),
     ("success", "SUCCESS"),
-    ("statusCode", "STATUS"),
-    ("attemptNumber", "ATTEMPT"),
+    ("responseStatusCode", "STATUS"),
+    ("sequenceNumber", "SEQ"),
     ("createdAt", "CREATED"),
 ]
 
@@ -118,7 +118,7 @@ def webhooks_create(
     if secret is not None:
         payload["secret"] = secret
     if event_types:
-        payload["eventTypes"] = list(event_types)
+        payload["events"] = list(event_types)
     if max_retries is not None:
         payload["maxRetries"] = max_retries
     if retry_interval is not None:
@@ -222,7 +222,7 @@ def webhooks_update(
     if secret is not None:
         payload["secret"] = secret
     if event_types:
-        payload["eventTypes"] = list(event_types)
+        payload["events"] = list(event_types)
     if max_retries is not None:
         payload["maxRetries"] = max_retries
     if retry_interval is not None:
@@ -230,7 +230,7 @@ def webhooks_update(
     if include_results is not None:
         payload["includeResults"] = include_results
     if is_active is not None:
-        payload["isActive"] = is_active
+        payload["status"] = "active" if is_active else "inactive"
 
     custom_headers = _parse_json_option(custom_headers_json, "--headers")
     if custom_headers is not None:

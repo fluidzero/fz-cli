@@ -77,6 +77,7 @@ class FZClient:
             access_token=tokens["access_token"],
             refresh_token=None,
             expires_in=tokens.get("expires_in", 3600),
+            persist=False,  # M2M tokens are memory-only; never clobber creds file
         )
 
     @property

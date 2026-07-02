@@ -21,7 +21,8 @@ def test_create(invoke, api):
     assert result.exit_code == 0, result.output
     body = api.last.json
     assert body["url"] == "https://example.com/hook"
-    assert body["eventTypes"] == ["run.completed", "run.failed"]
+    # EV aliases event_types as "events" — "eventTypes" is silently dropped.
+    assert body["events"] == ["run.completed", "run.failed"]
     assert body["secret"] == "s3cret"
 
 
